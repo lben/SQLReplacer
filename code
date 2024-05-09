@@ -1,0 +1,54 @@
+import re
+
+def get_identifiers(sql):
+    identifier_regex = r'(?:(?<=\s)|(?<=\()|(?<=\.))(?!(?:SELECT|FROM|JOIN|ON|WHERE|GROUP BY|HAVING|ORDER BY|LIMIT|OFFSET|AS|NOT|AND|OR|IN|LIKE|BETWEEN|IS|NULL|TRUE|FALSE|CASE|WHEN|THEN|ELSE|END|ASC|DESC|DISTINCT|ALL|EXISTS|UNION|INTERSECT|EXCEPT)(?:\s|$))([a-zA-Z_][a-zA-Z0-9_]*)'
+    return re.findall(identifier_regex, sql, re.IGNORECASE)
+
+def replace_identifiers(sql, identifier_map):
+    for original, new in identifier_map.items():
+        sql = re.sub(f'\\b{original}\\b', new, sql)
+    return sql
+
+def main():
+    identifier_map = {}
+    inverse_map = {}
+
+    while True:
+        print("\nEnter your SQL query (or 'q' to quit):")
+        sql = input().strip()
+
+        if sql.lower() == 'q':
+            break
+
+        identifiers = get_identifiers(sql)
+        unique_identifiers = sorted(set(identifiers))
+
+        print("\nIdentified non-standard SQL identifiers:")
+        for identifier in unique_identifiers:
+            if identifier not in identifier_map:
+                print(f"{identifier}=")
+
+        print("\nEnter mapped names for each identifier (leave blank to keep original):")
+        for identifier in unique_identifiers:
+            if identifier not in identifier_map:
+                mapped_name = input(f"{identifier}=").strip()
+                if mapped_name:
+                    identifier_map[identifier] = mapped_name
+                    inverse_map[mapped_name] = identifier
+
+        updated_sql = replace_identifiers(sql, identifier_map)
+        print("\nUpdated SQL query:")
+        print(updated_sql)
+
+        print("\nDo you want to modify this SQL query further? (y/n)")
+        modify = input().strip().lower()
+
+        if modify == 'y':
+            print("\nEnter the modified SQL query:")
+            modified_sql = input().strip()
+            original_sql = replace_identifiers(modified_sql, inverse_map)
+            print("\nOriginal SQL query with identifiers replaced:")
+            print(original_sql)
+
+if __name__ == '__main__':
+    main()
