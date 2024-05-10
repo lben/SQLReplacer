@@ -1,0 +1,179 @@
+import re
+import os
+import datetime
+import json
+
+def get_identifiers(sql):
+    # Remove comments
+    sql = re.sub(r'--.*', '', sql)
+    
+    # Replace string literals with placeholders
+    string_literal_regex = r"(?P<quote>['\"])(?:(?!\1).)*?\1"
+    string_literals = re.findall(string_literal_regex, sql)
+    for i, literal in enumerate(string_literals):
+        sql = sql.replace(literal, f"<STRING_{i}>", 1)
+    
+    identifier_regex = r'(?:(?<=\s)|(?<=\()|(?<=\.)|(?<=,)|(?<=@)|(?<=\[)|(?<=])|(?=\s)|(?=$))(?!(?:ADD|ALL|ALTER|AND|ANY|AS|ASC|AUTHORIZATION|BACKUP|BEGIN|BETWEEN|BREAK|BROWSE|BULK|BY|CASCADE|CASE|CHECK|CHECKPOINT|CLOSE|CLUSTERED|COALESCE|COLLATE|COLUMN|COMMIT|COMPUTE|CONSTRAINT|CONTAINS|CONTAINSTABLE|CONTINUE|CONVERT|CREATE|CROSS|CURRENT|CURRENT_DATE|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_USER|CURSOR|DATABASE|DBCC|DEALLOCATE|DECLARE|DEFAULT|DELETE|DENY|DESC|DISK|DISTINCT|DISTRIBUTED|DOUBLE|DROP|DUMP|ELSE|END|ERRLVL|ESCAPE|EXCEPT|EXEC|EXECUTE|EXISTS|EXIT|EXTERNAL|FETCH|FILE|FILLFACTOR|FOR|FOREIGN|FREETEXT|FREETEXTTABLE|FROM|FULL|FUNCTION|GOTO|GRANT|GROUP|HAVING|HOLDLOCK|IDENTITY|IDENTITY_INSERT|IDENTITYCOL|IF|IN|INDEX|INNER|INSERT|INTERSECT|INTO|IS|JOIN|KEY|KILL|LEFT|LIKE|LINENO|LOAD|MERGE|NATIONAL|NATURAL|NOCHECK|NONCLUSTERED|NOT|NULL|NULLIF|OF|OFF|OFFSETS|ON|OPEN|OPENDATASOURCE|OPENQUERY|OPENROWSET|OPENXML|OPTION|OR|ORDER|OUTER|OVER|PERCENT|PIVOT|PLAN|PRECISION|PRIMARY|PRINT|PROC|PROCEDURE|PUBLIC|RAISERROR|READ|READTEXT|RECONFIGURE|REFERENCES|REPLICATION|RESTORE|RESTRICT|RETURN|REVOKE|RIGHT|ROLLBACK|ROWCOUNT|ROWGUIDCOL|RULE|SAVE|SCHEMA|SECURITYAUDIT|SELECT|SEMANTICKEYPHRASETABLE|SEMANTICSIMILARITYDETAILSTABLE|SEMANTICSIMILARITYTABLE|SESSION_USER|SET|SETUSER|SHUTDOWN|SOME|STATISTICS|SYSTEM_USER|TABLE|TABLESAMPLE|TEXTSIZE|THEN|TO|TOP|TRAN|TRANSACTION|TRIGGER|TRUNCATE|TRY_CONVERT|TSEQUAL|UNION|UNIQUE|UNPIVOT|UPDATE|UPDATETEXT|USE|USER|VALUES|VARYING|VIEW|WAITFOR|WHEN|WHERE|WHILE|WITH|WITHIN|WRITETEXT|XMLCAST|XMLEXISTS|XMLNAMESPACES|XMLPARSE|XMLQUERY|XPATH|XSINIL)(?:\s|$))(?!BY\b)([a-zA-Z_][a-zA-Z0-9_]*(?:\s*\(.*?\))?)'
+    identifiers = re.findall(identifier_regex, sql, re.IGNORECASE)
+    
+    return sql, string_literals, identifiers
+
+def replace_identifiers(sql, string_literals, identifier_map):
+    for original, mapped in identifier_map.items():
+        sql = re.sub(fr'\b{re.escape(original)}\b', mapped, sql)
+    
+    # Replace placeholders back with string literals
+    for i, literal in enumerate(string_literals):
+        sql = sql.replace(f"<STRING_{i}>", literal, 1)
+    
+    return sql
+
+def save_query(sql, identifier_map, save_name=None):
+    if save_name:
+        filename = f"{save_name}.json"
+    else:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"query_{timestamp}.json"
+    
+    data = {
+        'sql': sql,
+        'identifier_map': identifier_map
+    }
+    
+    try:
+        with open(filename, 'w') as file:
+            json.dump(data, file, indent=4)
+        print(f"Query saved as {filename}")
+    except IOError as e:
+        print(f"Error saving query: {str(e)}")
+
+def load_query():
+    files = [f for f in os.listdir('.') if f.endswith('.json')]
+    
+    if not files:
+        print("No saved queries found.")
+        return None, None
+    
+    print("Saved queries:")
+    for i, file in enumerate(files, start=1):
+        print(f"{i}. {file}")
+    
+    while True:
+        try:
+            choice = int(input("Enter the number of the query you want to load: "))
+            if 1 <= choice <= len(files):
+                filename = files[choice - 1]
+                with open(filename, 'r') as file:
+                    data = json.load(file)
+                    sql = data['sql']
+                    identifier_map = data['identifier_map']
+                return sql, identifier_map
+            else:
+                print("Invalid choice.")
+        except ValueError:
+            print("Invalid input. Please enter a valid number.")
+
+def main():
+    while True:
+        print("\nMenu:")
+        print("1. Enter a new SQL query")
+        print("2. Load a saved SQL query")
+        print("3. Quit")
+        
+        choice = input("Enter your choice (1-3): ")
+        
+        if choice == '1':
+            identifier_map = {}
+            inverse_map = {}
+            
+            while True:
+                print("\nEnter your SQL query (ensure it ends with ;) or 'q' to quit:")
+                sql = ""
+                while True:
+                    line = input().strip()
+                    if line == 'q':
+                        break
+                    sql += line + "\n"
+                    if sql.strip().endswith(';'):
+                        break
+                
+                if line == 'q':
+                    break
+                
+                try:
+                    sql, string_literals, identifiers = get_identifiers(sql)
+                except Exception as e:
+                    print(f"Error parsing SQL query: {str(e)}")
+                    continue
+                
+                unique_identifiers = sorted(set(identifier.lower() for identifier in identifiers if identifier.lower() not in [literal.lower() for literal in string_literals]))
+                
+                print("\nIdentified non-standard SQL identifiers:")
+                for identifier in unique_identifiers:
+                    if identifier not in identifier_map:
+                        print(f"{identifier}=")
+                
+                print("\nEnter mapped names for each identifier (leave blank to keep original):")
+                for identifier in unique_identifiers:
+                    if identifier not in identifier_map:
+                        while True:
+                            mapped_name = input(f"{identifier}=").strip().lower()
+                            if not mapped_name:
+                                break
+                            if mapped_name in inverse_map:
+                                print(f"Mapped name '{mapped_name}' is already used for identifier '{inverse_map[mapped_name]}'. Please choose a different name.")
+                            else:
+                                identifier_map[identifier] = mapped_name
+                                inverse_map[mapped_name] = identifier
+                                break
+                
+                updated_sql = replace_identifiers(sql, string_literals, identifier_map)
+                print("\nUpdated SQL query:")
+                print(updated_sql)
+                
+                save_name = input("\nEnter a name for the saved query file (leave blank to use the date): ").strip()
+                save_query(sql, identifier_map, save_name)
+                
+                while True:
+                    print("\nDo you want to keep iterating? (y/n)")
+                    iterate = input().strip().lower()
+                    
+                    if iterate == 'y':
+                        print("\nEnter the modified SQL query (press Enter twice to finish):")
+                        modified_sql = ""
+                        while True:
+                            line = input().strip()
+                            if not line:
+                                break
+                            modified_sql += line + "\n"
+                        
+                        try:
+                            modified_sql, string_literals, _ = get_identifiers(modified_sql)
+                            original_sql = replace_identifiers(modified_sql, string_literals, inverse_map)
+                            print("\nOriginal SQL query with identifiers replaced:")
+                            print(original_sql)
+                        except Exception as e:
+                            print(f"Error parsing modified SQL query: {str(e)}")
+                    
+                    elif iterate == 'n':
+                        break
+                    else:
+                        print("Invalid choice. Please enter 'y' or 'n'.")
+        
+        elif choice == '2':
+            sql, identifier_map = load_query()
+            if sql is not None:
+                print("\nLoaded SQL query:")
+                print(sql)
+                print("\nLoaded identifier mappings:")
+                print(json.dumps(identifier_map, indent=4))
+        
+        elif choice == '3':
+            print("Goodbye!")
+            break
+        
+        else:
+            print("Invalid choice. Please enter a number between 1 and 3.")
+
+if __name__ == '__main__':
+    main()
