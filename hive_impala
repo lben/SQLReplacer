@@ -1,0 +1,40 @@
+from pyspark.sql import SparkSession
+
+def run_query(spark_session):
+    # Your existing Hive query
+    hive_query = "SELECT * FROM your_hive_table"
+    hive_df = spark_session.sql(hive_query)
+    
+    # Query for Impala source (reading Parquet tables)
+    impala_query = "SELECT * FROM your_impala_parquet_table"
+    impala_jdbc_url = "jdbc:impala://your_impala_host:21050/your_database"
+    
+    impala_df = spark_session.read \
+        .format("jdbc") \
+        .option("url", impala_jdbc_url) \
+        .option("query", impala_query) \
+        .option("driver", "com.cloudera.impala.jdbc41.Driver") \
+        .option("user", "your_username") \
+        .option("password", "your_password") \
+        .load()
+    
+    # Perform the distributed join
+    result_df = hive_df.join(impala_df, hive_df.join_column == impala_df.join_column, "inner")
+    
+    result_df.explain(extended=True)  # This will show the detailed execution plan
+    result_df.show()
+
+def create_session():
+    spark = SparkSession.builder \
+        .enableHiveSupport() \
+        .appName("spark_impala_query_tester") \
+        .config("spark.jars", "/path/to/ImpalaJDBC41.jar") \
+        .getOrCreate()
+    
+    sc = spark.sparkContext
+    sc.setLogLevel("ERROR")
+    return spark
+
+if __name__ == "__main__":
+    spark_session = create_session()
+    run_query(spark_session)
