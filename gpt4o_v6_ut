@@ -1,0 +1,123 @@
+import re
+import json
+import os
+import uuid
+from datetime import datetime
+
+RESERVED_WORDS = {
+    'ADD', 'ALL', 'ALTER', 'AND', 'ANY', 'AS', 'ASC', 'BACKUP', 'BETWEEN', 'CASE', 'CHECK', 'COLUMN', 'CONSTRAINT', 'CREATE', 'DATABASE', 'DEFAULT', 'DELETE',
+    'DESC', 'DISTINCT', 'DROP', 'EXEC', 'EXISTS', 'FOREIGN', 'FROM', 'FULL', 'GROUP', 'HAVING', 'IN', 'INDEX', 'INNER', 'INSERT', 'INTO', 'IS', 'JOIN', 'LEFT',
+    'LIKE', 'LIMIT', 'NOT', 'NULL', 'OR', 'ORDER', 'OUTER', 'PRIMARY', 'PROCEDURE', 'RIGHT', 'ROWNUM', 'SELECT', 'SET', 'TABLE', 'TOP', 'TRUNCATE', 'UNION',
+    'UNIQUE', 'UPDATE', 'VALUES', 'VIEW', 'WHERE', 'WITH', 'PARTITION', 'BY', 'GROUP BY', 'ORDER BY', 'PARTITION BY', 'ON',
+    'AVG', 'COUNT', 'FIRST', 'LAST', 'MAX', 'MIN', 'SUM', 'UCASE', 'LCASE', 'MID', 'LEN', 'ROUND', 'NOW', 'FORMAT'
+}
+
+# Convert RESERVED_WORDS to lower case for case-insensitive matching
+RESERVED_WORDS = {word.lower() for word in RESERVED_WORDS}
+
+def save_mapping(mapping, filename=None):
+    if filename is None:
+        filename = datetime.now().strftime("mapping_%Y%m%d_%H%M%S.json")
+        print(f"No filename provided. Using default filename: {filename}")
+    with open(filename, 'w') as f:
+        json.dump(mapping, f, indent=4)
+    return filename
+
+def load_mapping(filename):
+    with open(filename, 'r') as f:
+        return json.load(f)
+
+def generate_obfuscated_name():
+    return 'obf_' + str(uuid.uuid4()).replace('-', '_')
+
+def obfuscate_identifiers(sql_query):
+    words = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', sql_query)
+    unique_identifiers = {word for word in words if word.lower() not in RESERVED_WORDS}
+
+    mapping = {}
+    for identifier in unique_identifiers:
+        replacement = generate_obfuscated_name()
+        mapping[identifier] = replacement
+
+    return mapping
+
+def replace_identifiers(sql_query, mapping, reverse=False):
+    for identifier, replacement in sorted(mapping.items(), key=lambda item: len(item[0]), reverse=True):
+        pattern = re.compile(re.escape(replacement if reverse else identifier), re.IGNORECASE)
+        sql_query = pattern.sub(lambda match: replacement if not reverse else identifier, sql_query)
+    return sql_query
+
+def get_multiline_input(prompt):
+    print(prompt)
+    lines = []
+    while True:
+        line = input()
+        if line.strip().endswith(';'):
+            lines.append(line)
+            break
+        lines.append(line)
+    return '\n'.join(lines)
+
+def list_mapping_files():
+    files = [f for f in os.listdir() if f.endswith('.json')]
+    if not files:
+        print("No mapping files found.")
+        return None
+    for idx, file in enumerate(files):
+        print(f"{idx + 1}. {file}")
+    choice = int(input("Enter the number of the file you want to load: ")) - 1
+    return files[choice] if 0 <= choice < len(files) else None
+
+def main():
+    while True:
+        print("\nMenu:")
+        print("1. Input SQL to create mapping")
+        print("2. Load mapping from file")
+        print("3. Exit")
+        choice = input("Enter your choice: ")
+
+        obfuscated_sql = ""
+
+        if choice == '1':
+            sql_query = get_multiline_input("Enter SQL query (end with ';' on a new line):")
+            mapping = obfuscate_identifiers(sql_query)
+            filename = input("Enter filename to save mapping (or press enter to use default): ")
+            filename = save_mapping(mapping, filename)
+            obfuscated_sql = replace_identifiers(sql_query, mapping)
+            print("Obfuscated SQL query:")
+            print(obfuscated_sql)
+
+        elif choice == '2':
+            filename = list_mapping_files()
+            if not filename:
+                continue
+            mapping = load_mapping(filename)
+            print("Mapping loaded successfully.")
+
+        elif choice == '3':
+            break
+
+        else:
+            print("Invalid choice. Please try again.")
+            continue
+
+        while True:
+            if choice == '2':
+                sql_query = get_multiline_input("Enter SQL query (end with ';' on a new line):")
+                obfuscated_sql = replace_identifiers(sql_query, mapping)
+                print("Obfuscated SQL query:")
+                print(obfuscated_sql)
+
+            iteration_query = get_multiline_input("Enter variation of the SQL query (end with ';' on a new line):")
+            original_sql = replace_identifiers(iteration_query, mapping, reverse=True)
+            print("SQL query with original identifiers:")
+            print(original_sql)
+            obfuscated_sql = replace_identifiers(original_sql, mapping)
+
+            continue_iteration = input("Do you want to continue iterating? (y/n): ").strip().lower()
+            if continue_iteration != 'y':
+                break
+
+if __name__ == "__main__":
+    main()
+

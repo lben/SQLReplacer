@@ -1,0 +1,107 @@
+import re
+import json
+import os
+import time
+import uuid
+from datetime import datetime
+
+RESERVED_WORDS = {
+    'ADD', 'ALL', 'ALTER', 'AND', 'ANY', 'AS', 'ASC', 'BACKUP', 'BETWEEN', 'CASE', 'CHECK', 'COLUMN', 'CONSTRAINT', 'CREATE', 'DATABASE', 'DEFAULT', 'DELETE',
+    'DESC', 'DISTINCT', 'DROP', 'EXEC', 'EXISTS', 'FOREIGN', 'FROM', 'FULL', 'GROUP', 'HAVING', 'IN', 'INDEX', 'INNER', 'INSERT', 'INTO', 'IS', 'JOIN', 'LEFT',
+    'LIKE', 'LIMIT', 'NOT', 'NULL', 'OR', 'ORDER', 'OUTER', 'PRIMARY', 'PROCEDURE', 'RIGHT', 'ROWNUM', 'SELECT', 'SET', 'TABLE', 'TOP', 'TRUNCATE', 'UNION',
+    'UNIQUE', 'UPDATE', 'VALUES', 'VIEW', 'WHERE', 'WITH', 'PARTITION', 'BY', 'GROUP BY', 'ORDER BY', 'PARTITION BY', 'ON',
+    'AVG', 'COUNT', 'FIRST', 'LAST', 'MAX', 'MIN', 'SUM', 'UCASE', 'LCASE', 'MID', 'LEN', 'ROUND', 'NOW', 'FORMAT'
+}
+
+def save_mapping(mapping, filename=None):
+    if filename is None:
+        filename = datetime.now().strftime("mapping_%Y%m%d_%H%M%S.json")
+        print(f"No filename provided. Using default filename: {filename}")
+    with open(filename, 'w') as f:
+        json.dump(mapping, f, indent=4)
+    return filename
+
+def load_mapping(filename):
+    with open(filename, 'r') as f:
+        return json.load(f)
+
+def generate_obfuscated_name():
+    return 'obf_' + str(uuid.uuid4()).replace('-', '_')
+
+def obfuscate_identifiers(sql_query):
+    words = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', sql_query)
+    unique_identifiers = set(words) - RESERVED_WORDS
+
+    mapping = {}
+    for identifier in unique_identifiers:
+        replacement = input(f"Enter replacement for '{identifier}' (suggested: '{generate_obfuscated_name()}'): ") or generate_obfuscated_name()
+        mapping[identifier] = replacement
+
+    return mapping
+
+def replace_identifiers(sql_query, mapping, reverse=False):
+    for identifier, replacement in mapping.items():
+        if reverse:
+            sql_query = re.sub(r'\b' + re.escape(replacement) + r'\b', identifier, sql_query)
+        else:
+            sql_query = re.sub(r'\b' + re.escape(identifier) + r'\b', replacement, sql_query)
+    return sql_query
+
+def get_multiline_input(prompt):
+    print(prompt)
+    lines = []
+    while True:
+        line = input()
+        if line.strip().endswith(';'):
+            lines.append(line)
+            break
+        lines.append(line)
+    return '\n'.join(lines)
+
+def main():
+    while True:
+        print("\nMenu:")
+        print("1. Input SQL to create mapping")
+        print("2. Load mapping from file")
+        print("3. Exit")
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            sql_query = get_multiline_input("Enter SQL query (end with ';' on a new line):")
+            mapping = obfuscate_identifiers(sql_query)
+            filename = input("Enter filename to save mapping (or press enter to use default): ")
+            filename = save_mapping(mapping, filename)
+            obfuscated_sql = replace_identifiers(sql_query, mapping)
+            print("Obfuscated SQL query:")
+            print(obfuscated_sql)
+
+        elif choice == '2':
+            filename = input("Enter filename to load mapping: ")
+            if not os.path.isfile(filename):
+                print("File not found. Please try again.")
+                continue
+            mapping = load_mapping(filename)
+
+        elif choice == '3':
+            break
+
+        else:
+            print("Invalid choice. Please try again.")
+            continue
+
+        while True:
+            print("\nObfuscated SQL query:")
+            print(obfuscated_sql)
+            iteration_query = get_multiline_input("Enter variation of the SQL query (end with ';' on a new line):")
+            original_sql = replace_identifiers(iteration_query, mapping, reverse=True)
+            print("SQL query with original identifiers:")
+            print(original_sql)
+            obfuscated_sql = replace_identifiers(original_sql, mapping)
+
+            continue_iteration = input("Do you want to continue iterating? (yes/no): ").strip().lower()
+            if continue_iteration != 'yes':
+                break
+
+if __name__ == "__main__":
+    main()
+
