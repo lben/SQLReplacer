@@ -1,59 +1,82 @@
-const style = document.createElement('style');
-style.textContent = `
-  /* High-quality Dark Mode CSS */
-html {
-  filter: invert(90%) hue-rotate(180deg);
-}
+import re
+from bs4 import BeautifulSoup
+import colorsys
 
-body {
-  background: #141414 !important;
-}
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-img, video, iframe, canvas, svg, [style*="background-image"] {
-  filter: invert(100%) hue-rotate(180deg) !important;
-}
+def rgb_to_hex(rgb):
+    return '#{:02x}{:02x}{:02x}'.format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
 
-@media (prefers-color-scheme: dark) {
-  html {
-    filter: none;
-  }
+def darken_color(hex_color):
+    rgb = hex_to_rgb(hex_color)
+    hsv = colorsys.rgb_to_hsv(rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0)
+    darkened_rgb = colorsys.hsv_to_rgb(hsv[0], hsv[1], max(hsv[2] - 0.5, 0))
+    return rgb_to_hex((darkened_rgb[0]*255, darkened_rgb[1]*255, darkened_rgb[2]*255))
 
-  body {
-    background: initial !important;
-  }
+def lighten_color(hex_color):
+    rgb = hex_to_rgb(hex_color)
+    hsv = colorsys.rgb_to_hsv(rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0)
+    lightened_rgb = colorsys.hsv_to_rgb(hsv[0], hsv[1], min(hsv[2] + 0.5, 1))
+    return rgb_to_hex((lightened_rgb[0]*255, lightened_rgb[1]*255, lightened_rgb[2]*255))
 
-  img, video, iframe, canvas, svg, [style*="background-image"] {
-    filter: none !important;
-  }
-}
+def generate_dark_mode_js(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # Extract all unique colors from inline styles and style tags
+    colors = set()
+    for tag in soup.find_all(style=True):
+        colors.update(re.findall(r'#[0-9a-fA-F]{6}', tag['style']))
+    
+    for style in soup.find_all('style'):
+        colors.update(re.findall(r'#[0-9a-fA-F]{6}', style.string))
+    
+    # Generate color mappings
+    color_map = {color: darken_color(color) if sum(hex_to_rgb(color)) > 382 else lighten_color(color) for color in colors}
+    
+    # Generate JavaScript
+    js = """
+    (function() {
+        const styleElement = document.createElement('style');
+        styleElement.type = 'text/css';
+        styleElement.innerHTML = `
+            body { background-color: #121212 !important; color: #e0e0e0 !important; }
+    """
+    
+    for original, dark in color_map.items():
+        js += f"* {{ color: {original} !important; color: {dark} !important; }}\n"
+        js += f"* {{ background-color: {original} !important; background-color: {dark} !important; }}\n"
+    
+    js += """
+        `;
+        document.head.appendChild(styleElement);
+        
+        const invertImages = () => {
+            document.querySelectorAll('img, video, canvas').forEach(el => {
+                el.style.filter = 'invert(1) hue-rotate(180deg)';
+            });
+        };
+        
+        invertImages();
+        
+        // Handle dynamically loaded content
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList') {
+                    invertImages();
+                }
+            });
+        });
+        
+        observer.observe(document.body, { childList: true, subtree: true });
+    })();
+    """
+    
+    return js
 
-/* Fine-tuning for better readability */
-:root {
-  --dark-bg: #1a1a1a;
-  --dark-text: #e0e0e0;
-  --dark-link: #6ab0f3;
-}
-
-body, p, div, span, h1, h2, h3, h4, h5, h6 {
-  background-color: var(--dark-bg) !important;
-  color: var(--dark-text) !important;
-}
-
-a, a:visited {
-  color: var(--dark-link) !important;
-}
-
-/* Improve contrast for input fields */
-input, textarea, select {
-  background-color: #2a2a2a !important;
-  color: #ffffff !important;
-  border-color: #444444 !important;
-}
-
-/* Adjust shadows for dark mode */
-* {
-  box-shadow: none !important;
-  text-shadow: none !important;
-}
-`;
-document.head.appendChild(style);
+# Usage
+html_content = input("Paste the HTML content here (press Ctrl+D or Cmd+D when finished):\n")
+dark_mode_js = generate_dark_mode_js(html_content)
+print("\nJavaScript to paste in the console:")
+print(dark_mode_js)
