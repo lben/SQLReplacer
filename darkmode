@@ -1,0 +1,59 @@
+const style = document.createElement('style');
+style.textContent = `
+  /* High-quality Dark Mode CSS */
+html {
+  filter: invert(90%) hue-rotate(180deg);
+}
+
+body {
+  background: #141414 !important;
+}
+
+img, video, iframe, canvas, svg, [style*="background-image"] {
+  filter: invert(100%) hue-rotate(180deg) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    filter: none;
+  }
+
+  body {
+    background: initial !important;
+  }
+
+  img, video, iframe, canvas, svg, [style*="background-image"] {
+    filter: none !important;
+  }
+}
+
+/* Fine-tuning for better readability */
+:root {
+  --dark-bg: #1a1a1a;
+  --dark-text: #e0e0e0;
+  --dark-link: #6ab0f3;
+}
+
+body, p, div, span, h1, h2, h3, h4, h5, h6 {
+  background-color: var(--dark-bg) !important;
+  color: var(--dark-text) !important;
+}
+
+a, a:visited {
+  color: var(--dark-link) !important;
+}
+
+/* Improve contrast for input fields */
+input, textarea, select {
+  background-color: #2a2a2a !important;
+  color: #ffffff !important;
+  border-color: #444444 !important;
+}
+
+/* Adjust shadows for dark mode */
+* {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+`;
+document.head.appendChild(style);
