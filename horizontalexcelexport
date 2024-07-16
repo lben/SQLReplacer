@@ -1,6 +1,6 @@
 import pandas as pd
-from openpyxl import load_workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
 
 def create_excel_with_dataframes(df_dict, output_file, sheet_name='Sheet1'):
     # Constants
@@ -10,14 +10,14 @@ def create_excel_with_dataframes(df_dict, output_file, sheet_name='Sheet1'):
     GAP_BETWEEN_DFS = 2
 
     with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        workbook = writer.book
-        worksheet = workbook.create_sheet(sheet_name)
-        
         current_col = START_COL
         
         for title, df in df_dict.items():
             # Write DataFrame
             df.to_excel(writer, sheet_name=sheet_name, startrow=START_ROW, startcol=current_col, index=False)
+            
+            # Access the worksheet
+            worksheet = writer.sheets[sheet_name]
             
             # Add and format title
             title_cell = worksheet.cell(row=TITLE_ROW, column=current_col + 1, value=title)
@@ -25,12 +25,16 @@ def create_excel_with_dataframes(df_dict, output_file, sheet_name='Sheet1'):
             worksheet.merge_cells(start_row=TITLE_ROW, start_column=current_col + 1, 
                                   end_row=TITLE_ROW, end_column=end_col)
             title_cell.alignment = Alignment(horizontal='center')
+            title_cell.font = Font(bold=True)  # Apply bold formatting
+            
+            # Auto-adjust column widths
+            for idx, col in enumerate(df.columns):
+                column_letter = get_column_letter(current_col + idx + 1)
+                column_width = max(df[col].astype(str).map(len).max(), len(col))
+                worksheet.column_dimensions[column_letter].width = column_width + 2  # Add some padding
             
             # Move to next position
             current_col = end_col + GAP_BETWEEN_DFS
-
-    # Save the workbook
-    workbook.save(output_file)
 
 # Example usage
 df1 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6], 'C': [7, 8, 9]})
@@ -44,3 +48,17 @@ df_dict = {
 }
 
 create_excel_with_dataframes(df_dict, 'output.xlsx')
+```
+
+Here are the main updates from the previous version:
+
+1. Added a new import: `from openpyxl.utils import get_column_letter`
+
+2. Added a new block of code inside the main loop to auto-adjust column widths:
+
+```python
+# Auto-adjust column widths
+for idx, col in enumerate(df.columns):
+    column_letter = get_column_letter(current_col + idx + 1)
+    column_width = max(df[col].astype(str).map(len).max(), len(col))
+    worksheet.column_dimensions[column_letter].width = column_width + 2  # Add some padding
