@@ -1,0 +1,49 @@
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Create DataFrame from the given data
+data = {
+    'run_date': ['2024 07 15', '2024 07 15', '2024 07 15', '2024 07 16', '2024 07 16', '2024 07 16'],
+    'metric_type': ['not_matched_in_a', 'not_matched_in_b', 'matched', 'not_matched_in_a', 'not_matched_in_b', 'matched'],
+    'value': [2000, 3000, 500, 1980, 2500, 1020]
+}
+df = pd.DataFrame(data)
+
+# Convert run_date to datetime
+df['run_date'] = pd.to_datetime(df['run_date'], format='%Y %m %d')
+
+# Create subplots
+fig = make_subplots(rows=1, cols=2, subplot_titles=df['run_date'].dt.strftime('%Y %m %d').unique())
+
+# Colors for each metric type
+colors = {'not_matched_in_a': 'blue', 'not_matched_in_b': 'green', 'matched': 'teal'}
+
+# Add bars for each date
+for i, date in enumerate(df['run_date'].unique(), start=1):
+    date_data = df[df['run_date'] == date]
+    
+    for metric_type in ['not_matched_in_a', 'not_matched_in_b', 'matched']:
+        value = date_data[date_data['metric_type'] == metric_type]['value'].values[0]
+        
+        fig.add_trace(
+            go.Bar(
+                x=[metric_type],
+                y=[value],
+                name=metric_type,
+                marker_color=colors[metric_type],
+                showlegend=i == 1  # Only show legend for the first subplot
+            ),
+            row=1, col=i
+        )
+
+# Update layout
+fig.update_layout(
+    height=500,
+    width=800,
+    title_text="Metric Comparison",
+    barmode='group'
+)
+
+# Show the plot
+fig.show()
