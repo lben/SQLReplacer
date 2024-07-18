@@ -1,25 +1,31 @@
 def create_plot(df):
-    # Ensure the date is in datetime format
+    # Ensure the date is in datetime format and sort the dataframe
     df['run_date'] = pd.to_datetime(df['run_date'])
-    
-    # Sort the dataframe by date and metric_type
     df = df.sort_values(['run_date', 'metric_type'])
     
     # Get unique dates and metric types
     dates = df['run_date'].dt.strftime('%Y-%m-%d').unique()
     metric_types = df['metric_type'].unique()
     
+    # Colors for each metric type
+    colors = {'not_matched_in_a': 'blue', 'not_matched_in_b': 'green', 'matched': 'teal'}
+    
     # Create the figure
     fig = go.Figure()
     
-    # Colors for each metric type
-    colors = {'not_matched_in_a': 'blue', 'not_matched_in_b': 'green', 'matched': 'teal'}
+    # Create x-axis labels and positions
+    x_labels = []
+    x_positions = []
+    for i, date in enumerate(dates):
+        for j, metric in enumerate(metric_types):
+            x_labels.append(f"{date}<br>{metric}")
+            x_positions.append(i * (len(metric_types) + 1) + j)
     
     # Add bars for each metric type
     for i, metric_type in enumerate(metric_types):
         metric_data = df[df['metric_type'] == metric_type]
         fig.add_trace(go.Bar(
-            x=metric_data['run_date'].dt.strftime('%Y-%m-%d'),
+            x=x_positions[i::len(metric_types)],
             y=metric_data['value'],
             name=metric_type,
             marker_color=colors[metric_type]
@@ -27,11 +33,17 @@ def create_plot(df):
     
     # Update layout
     fig.update_layout(
-        title='Metric Comparison',
-        xaxis_title='Date',
+        title='Metric Comparison Across Dates',
+        xaxis=dict(
+            title='Date and Metric Type',
+            ticktext=x_labels,
+            tickvals=x_positions,
+            tickangle=45
+        ),
         yaxis_title='Value',
         barmode='group',
         legend_title='Metric Type',
-        height=500,
-        width=800
+        height=600,  # Increased height to accommodate labels
+        width=1000,  # Increased width for better readability
+        margin=dict(b=150)  # Increased bottom margin for labels
     )
