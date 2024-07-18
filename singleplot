@@ -1,0 +1,37 @@
+def create_plot(df):
+    # Ensure the date is in datetime format
+    df['run_date'] = pd.to_datetime(df['run_date'])
+    
+    # Sort the dataframe by date and metric_type
+    df = df.sort_values(['run_date', 'metric_type'])
+    
+    # Get unique dates and metric types
+    dates = df['run_date'].dt.strftime('%Y-%m-%d').unique()
+    metric_types = df['metric_type'].unique()
+    
+    # Create the figure
+    fig = go.Figure()
+    
+    # Colors for each metric type
+    colors = {'not_matched_in_a': 'blue', 'not_matched_in_b': 'green', 'matched': 'teal'}
+    
+    # Add bars for each metric type
+    for i, metric_type in enumerate(metric_types):
+        metric_data = df[df['metric_type'] == metric_type]
+        fig.add_trace(go.Bar(
+            x=metric_data['run_date'].dt.strftime('%Y-%m-%d'),
+            y=metric_data['value'],
+            name=metric_type,
+            marker_color=colors[metric_type]
+        ))
+    
+    # Update layout
+    fig.update_layout(
+        title='Metric Comparison',
+        xaxis_title='Date',
+        yaxis_title='Value',
+        barmode='group',
+        legend_title='Metric Type',
+        height=500,
+        width=800
+    )
