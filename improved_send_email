@@ -1,0 +1,47 @@
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+
+def send_mail(subject, sender_mail, receiver_mails: list, content, content_type='html', images=None):
+    if isinstance(receiver_mails, str):
+        receiver_mails = [receiver_mails]
+
+    if images:
+        msg = MIMEMultipart()
+        html_part = MIMEText(content, content_type)
+        msg.attach(html_part)
+
+        for img_id, img_data in images.items():
+            image = MIMEImage(img_data)
+            image.add_header('Content-ID', f'<{img_id}>')
+            msg.attach(image)
+    else:
+        msg = MIMEText(content, content_type)
+
+    msg['Subject'] = subject
+    msg['From'] = sender_mail
+    msg['To'] = ", ".join(receiver_mails)
+
+    smtp = smtplib.SMTP('localhost')  # this is meant to be run from the dataflame server
+    smtp.sendmail(msg['From'], receiver_mails, msg.as_string())
+    smtp.quit()
+
+# Example usage:
+# Without images
+send_mail("Simple Subject", "sender@example.com", ["receiver@example.com"], "<p>Simple HTML content</p>")
+
+# With multiple images
+images = {
+    'image1': open('path/to/image1.png', 'rb').read(),
+    'image2': open('path/to/image2.jpg', 'rb').read(),
+    'graph1': open('path/to/graph.png', 'rb').read()
+}
+html_content = '''
+<p>HTML content with multiple images:</p>
+<img src="cid:image1">
+<img src="cid:image2">
+<p>And here's a graph:</p>
+<img src="cid:graph1">
+'''
+send_mail("Subject with Images", "sender@example.com", ["receiver@example.com"], html_content, images=images)

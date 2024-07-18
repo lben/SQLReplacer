@@ -1,0 +1,34 @@
+html_content = f"""
+    <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .plot-container {{ text-align: center; margin-bottom: 20px; }}
+                .dataframes-container {{ display: flex; justify-content: space-between; }}
+                .dataframe-wrapper {{ width: 30%; }}
+                .dataframe-title {{ text-align: center; margin-bottom: 10px; }}
+                .dataframe {{ border-collapse: collapse; width: 100%; }}
+                .dataframe th, .dataframe td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                .dataframe th {{ background-color: #f2f2f2; }}
+            </style>
+        </head>
+        <body>
+            <div class="plot-container">
+                <img src="data:image/png;base64,{img_base64}" alt="Metric Comparison Plot" style="max-width: 100%; height: auto;">
+            </div>
+            <div class="dataframes-container">
+                <div class="dataframe-wrapper">
+                    <h3 class="dataframe-title">df1</h3>
+                    {df1}
+                </div>
+                <div class="dataframe-wrapper">
+                    <h3 class="dataframe-title">df2</h3>
+                    {df2}
+                </div>
+                <div class="dataframe-wrapper">
+                    <h3 class="dataframe-title">df3</h3>
+                    {df3}
+                </div>
+            </div>
+        </body>
+    </html>
