@@ -1,0 +1,238 @@
+import re
+import json
+import plotly.graph_objects as go
+from dash import Dash, dcc, html, Input, Output, State, callback_context
+import dash_draggable as draggable
+import networkx as nx
+import base64
+
+class ImpalaQueryPlanParser:
+    def __init__(self, plan_text):
+        self.plan_text = plan_text
+        self.nodes = {}
+        self.edges = []
+
+    def parse(self):
+        lines = self.plan_text.split('\n')
+        node_stack = []
+        current_indent = 0
+
+        for line in lines:
+            indent = len(line) - len(line.lstrip('|'))
+            if indent <= current_indent:
+                node_stack = node_stack[:indent//2]
+            current_indent = indent
+
+            match = re.match(r'\|--(\d+):(\w+).*\[(.*)\]', line.strip())
+            if match:
+                node_id, node_type, details = match.groups()
+                node_id = int(node_id)
+                parent_id = node_stack[-1] if node_stack else None
+                
+                cost = self.extract_cost(details)
+                self.nodes[node_id] = {
+                    'id': node_id,
+                    'type': node_type,
+                    'details': details,
+                    'cost': cost
+                }
+                
+                if parent_id is not None:
+                    self.edges.append((parent_id, node_id))
+                
+                node_stack.append(node_id)
+
+        return self.nodes, self.edges
+
+    def extract_cost(self, details):
+        cost_match = re.search(r'Estimated Per-Host Requirements: .*CPU: (.+) cycles', details)
+        if cost_match:
+            return self.parse_cost(cost_match.group(1))
+        return 0
+
+    def parse_cost(self, cost_str):
+        multipliers = {'K': 1e3, 'M': 1e6, 'B': 1e9, 'T': 1e12}
+        cost_str = cost_str.strip()
+        if cost_str[-1] in multipliers:
+            return float(cost_str[:-1]) * multipliers[cost_str[-1]]
+        return float(cost_str)
+
+class ImpalaQueryPlanViz:
+    def __init__(self, nodes, edges):
+        self.nodes = nodes
+        self.edges = edges
+        self.G = nx.DiGraph()
+        self.pos = {}
+        self.node_colors = []
+        self.build_graph()
+
+    def build_graph(self):
+        for node_id, node_data in self.nodes.items():
+            self.G.add_node(node_id, **node_data)
+        self.G.add_edges_from(self.edges)
+        self.update_layout()
+        self.update_colors()
+
+    def update_layout(self):
+        self.pos = nx.spring_layout(self.G)
+
+    def update_colors(self):
+        costs = [node['cost'] for node in self.nodes.values()]
+        min_cost, max_cost = min(costs), max(costs)
+        for node in self.nodes.values():
+            normalized_cost = (node['cost'] - min_cost) / (max_cost - min_cost)
+            node['color'] = f'rgb({int(255*normalized_cost)},{int(255*(1-normalized_cost))},0)'
+
+    def get_node_trace(self):
+        node_x = [self.pos[node][0] for node in self.G.nodes()]
+        node_y = [self.pos[node][1] for node in self.G.nodes()]
+        node_text = [f"ID: {node['id']}<br>Type: {node['type']}<br>Cost: {node['cost']:,.0f}<br>Details: {node['details']}" 
+                     for node in self.nodes.values()]
+        node_colors = [node['color'] for node in self.nodes.values()]
+
+        return go.Scatter(
+            x=node_x, y=node_y,
+            mode='markers',
+            hoverinfo='text',
+            text=node_text,
+            marker=dict(
+                showscale=True,
+                colorscale='RdYlGn',
+                reversescale=True,
+                color=node_colors,
+                size=15,
+                colorbar=dict(
+                    thickness=15,
+                    title='Node Cost',
+                    xanchor='left',
+                    titleside='right'
+                ),
+                line_width=2
+            )
+        )
+
+    def get_edge_trace(self):
+        edge_x = []
+        edge_y = []
+        for edge in self.G.edges():
+            x0, y0 = self.pos[edge[0]]
+            x1, y1 = self.pos[edge[1]]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+
+        return go.Scatter(
+            x=edge_x, y=edge_y,
+            line=dict(width=0.5, color='#888'),
+            hoverinfo='none',
+            mode='lines'
+        )
+
+    def create_figure(self):
+        return go.Figure(
+            data=[self.get_edge_trace(), self.get_node_trace()],
+            layout=go.Layout(
+                showlegend=False,
+                hovermode='closest',
+                margin=dict(b=20,l=5,r=5,t=40),
+                annotations=[dict(
+                    text="Impala Query Plan",
+                    showarrow=False,
+                    xref="paper", yref="paper",
+                    x=0.005, y=-0.002
+                )],
+                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
+            )
+        )
+
+app = Dash(__name__)
+
+app.layout = html.Div([
+    html.H1("Impala Query Plan Visualizer"),
+    dcc.Textarea(
+        id='query-plan-input',
+        placeholder='Paste your Impala query plan here...',
+        style={'width': '100%', 'height': 200},
+    ),
+    html.Button('Visualize', id='visualize-button', n_clicks=0),
+    html.Div(id='graph-container', style={'width': '100%', 'height': '600px'}),
+    dcc.Store(id='graph-data'),
+    html.Button('Save Layout', id='save-layout-button', n_clicks=0),
+    dcc.Download(id='download-layout'),
+    dcc.Upload(
+        id='upload-layout',
+        children=html.Div(['Drag and Drop or ', html.A('Select Layout File')]),
+        style={
+            'width': '100%',
+            'height': '60px',
+            'lineHeight': '60px',
+            'borderWidth': '1px',
+            'borderStyle': 'dashed',
+            'borderRadius': '5px',
+            'textAlign': 'center',
+            'margin': '10px'
+        },
+        multiple=False
+    )
+])
+
+@app.callback(
+    Output('graph-container', 'children'),
+    Output('graph-data', 'data'),
+    Input('visualize-button', 'n_clicks'),
+    Input('upload-layout', 'contents'),
+    State('query-plan-input', 'value'),
+    State('upload-layout', 'filename'),
+    prevent_initial_call=True
+)
+def update_graph(n_clicks, contents, query_plan, filename):
+    ctx = callback_context
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    if trigger_id == 'visualize-button' and query_plan:
+        parser = ImpalaQueryPlanParser(query_plan)
+        nodes, edges = parser.parse()
+        viz = ImpalaQueryPlanViz(nodes, edges)
+        fig = viz.create_figure()
+        graph_data = {
+            'nodes': nodes,
+            'edges': edges,
+            'positions': {str(k): v for k, v in viz.pos.items()}
+        }
+    elif trigger_id == 'upload-layout' and contents:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        graph_data = json.loads(decoded.decode('utf-8'))
+        nodes = graph_data['nodes']
+        edges = graph_data['edges']
+        viz = ImpalaQueryPlanViz(nodes, edges)
+        viz.pos = {int(k): v for k, v in graph_data['positions'].items()}
+        fig = viz.create_figure()
+    else:
+        return html.Div("Please input a query plan and click 'Visualize'"), None
+
+    return dcc.Graph(
+        id='query-plan-graph',
+        figure=fig,
+        style={'width': '100%', 'height': '100%'},
+        config={
+            'editable': True,
+            'edits': {
+                'shapePosition': True
+            },
+            'modeBarButtonsToAdd': ['drawclosedpath', 'eraseshape']
+        }
+    ), graph_data
+
+@app.callback(
+    Output('download-layout', 'data'),
+    Input('save-layout-button', 'n_clicks'),
+    State('graph-data', 'data'),
+    prevent_initial_call=True
+)
+def save_layout(n_clicks, graph_data):
+    if graph_data:
+        return dict(content=json.dumps(graph_data), filename="query_plan_layout.json")
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
