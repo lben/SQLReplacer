@@ -23,34 +23,52 @@ class ExcelFormulaDependencyParser:
         
     @lru_cache(maxsize=1)
     def load_workbook(self):
-        """Load workbook with caching to avoid repeated reads"""
+        """Load workbook with caching to avoid repeated reads, only reading necessary rows"""
         if not self.wb:
-            self.wb = openpyxl.load_workbook(self.file_path, data_only=False)
+            # Configure read_only for better performance
+            self.wb = openpyxl.load_workbook(
+                self.file_path,
+                data_only=False,
+                read_only=True,
+                properties=True  # Load workbook properties for sheet names
+            )
             self._cache_headers_and_formulas()
         return self.wb
     
     def _cache_headers_and_formulas(self):
         """Cache headers and formulas from specified rows"""
         wb = self.load_workbook()
+        max_row = max(self.header_row, self.formula_row)
+        
         for sheet_name in wb.sheetnames:
-            sheet = wb[sheet_name]
             self.headers[sheet_name] = {}
             self.formulas[sheet_name] = {}
             
-            # Read headers from specified header row
-            for cell in sheet[self.header_row]:
-                if cell.value:
-                    self.headers[sheet_name][get_column_letter(cell.column)] = cell.value
+            # Create a new worksheet reader for each sheet
+            ws = wb[sheet_name]
             
-            # Read formulas from specified formula row
-            for cell in sheet[self.formula_row]:
-                if cell.value:
-                    col_letter = get_column_letter(cell.column)
-                    self.formulas[sheet_name][col_letter] = cell.value if isinstance(cell.value, str) and cell.value.startswith('=') else None
+            # Only iterate through rows up to formula_row
+            for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=max_row, values_only=False), start=1):
+                for cell in row:
+                    if cell.value:
+                        col_letter = get_column_letter(cell.column)
+                        
+                        # Store headers
+                        if row_idx == self.header_row:
+                            self.headers[sheet_name][col_letter] = cell.value
+                            
+                        # Store formulas
+                        elif row_idx == self.formula_row:
+                            self.formulas[sheet_name][col_letter] = (
+                                cell.value if isinstance(cell.value, str) and cell.value.startswith('=') 
+                                else None
+                            )
+            
+            # Close the worksheet to free memory
+            ws.parent._archive.close()
 
     def _parse_column_references(self, formula: str) -> Set[tuple]:
         """Extract column references from a formula"""
-        # Pattern for column references (e.g., A2, B2, etc.)
         col_refs = set()
         
         # Handle VLOOKUP references
@@ -114,6 +132,11 @@ class ExcelFormulaDependencyParser:
         for i, child in enumerate(children):
             is_last_child = i == len(children) - 1
             self.print_tree(child, child_indent, is_last_child)
+
+    def __del__(self):
+        """Cleanup method to ensure workbook is closed"""
+        if self.wb:
+            self.wb.close()
 
 # Example usage:
 if __name__ == "__main__":
