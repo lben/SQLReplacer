@@ -19,18 +19,19 @@ def load_workbook_data(filename, header_row=1, formula_row=2):
         headers = {}
         formulas = {}
 
-        # Read header row
-        for cell in next(ws.iter_rows(min_row=header_row, max_row=header_row)):
-            # Use openpyxl’s cell.column_letter (or get it from the column index)
-            col_letter = cell.column_letter
+        # Read header row using enumerate to get the column index.
+        header_cells = list(ws.iter_rows(min_row=header_row, max_row=header_row))[0]
+        for idx, cell in enumerate(header_cells, start=1):
+            col_letter = get_column_letter(idx)
             headers[col_letter] = cell.value
 
-        # Read formula row
-        for cell in next(ws.iter_rows(min_row=formula_row, max_row=formula_row)):
-            col_letter = cell.column_letter
-            # If the cell value is a string starting with '=', assume it is a formula.
+        # Read formula row using enumerate as well.
+        formula_cells = list(ws.iter_rows(min_row=formula_row, max_row=formula_row))[0]
+        for idx, cell in enumerate(formula_cells, start=1):
+            col_letter = get_column_letter(idx)
             if cell.value and isinstance(cell.value, str) and cell.value.startswith("="):
                 formulas[col_letter] = cell.value
+
         workbook_data[sheet] = {
             'headers': headers,
             'formulas': formulas
