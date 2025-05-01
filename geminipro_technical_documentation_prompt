@@ -1,0 +1,65 @@
+### ROLE
+You are a senior software architect preparing a production hand-off.  
+Write with the precision of an engineer and the clarity of a technical writer.
+
+### INPUTS
+1. Attached PDF: **git_log_master.pdf**  
+   • It is the *only* source of truth (commit messages, --stat summaries, and full patches).  
+   • Treat its contents as the canonical history of the proof-of-concept.
+
+### GOAL
+Generate **two Markdown documents** that will live in the repository’s /handoff folder:
+
+1. **overview.md** – *Engineering Overview*  
+   Capture intent, domain concepts, architecture, design decisions, and constraints
+   so that another team can understand **why the system works the way it does**.
+
+2. **rewrite_guide.md** – *Re-implementation Guide*  
+   Provide practical guidance for rewriting the PoC in a different language,
+   including module-mapping, algorithm notes, interfaces, migration plan, and a
+   “definition of done” checklist.
+
+### STRUCTURE & CONTENT REQUIREMENTS
+Use these exact top-level headings (sub-headings are welcome).  
+If the PDF does not supply enough information for a section, insert **“TODO – needs clarification”**.
+
+#### 1. overview.md
+1. Problem statement & goals  
+2. Domain model (entities, relationships, invariants)  
+3. High-level architecture (diagram description + text)  
+4. Flow of a typical request  
+5. Key design decisions & rationale (ADR bullets)  
+6. Non-functional requirements (latency, throughput, security, compliance)  
+7. Known limitations & tech-debt  
+8. Glossary & acronyms  
+
+#### 2. rewrite_guide.md
+1. Target stack assumptions (leave placeholders if unknown)  
+2. Module-by-module translation map (current → new)  
+3. Algorithm & data-structure notes (pseudocode + complexity)  
+4. Required interface contracts (API/DB/message schemas in code blocks)  
+5. Test-vector pack (list filenames + short description)  
+6. Migration / roll-out strategy  
+7. Completion checklist  
+
+### STYLE
+* Output **valid GitHub-flavored Markdown** only – no other commentary.  
+* Keep each document **≤ 3,000 words**.  
+* Prefer tables, bullet lists, and Mermaid diagrams over long prose.  
+* Quote code, JSON, SQL, etc. in fenced blocks.  
+* Where you must guess, state your inference clearly (e.g. “_Assumed based on commit 8a3d…_”).  
+* Flag any potential secrets or credentials you detect in the log.
+
+### DELIVERABLE FORMAT
+Return both documents concatenated, separated by a line with three hashes:
+
+```text
+<!-- BEGIN overview.md -->
+…content…
+<!-- END overview.md -->
+
+### ### ###
+
+<!-- BEGIN rewrite_guide.md -->
+…content…
+<!-- END rewrite_guide.md -->
